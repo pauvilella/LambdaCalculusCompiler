@@ -88,14 +88,27 @@ redueixUnA (A lt1 lt2) -- Cas general aplicació, hem de mirar quin dels dos lt 
     | not (estaNormal lt2) = A lt1 (redueixUnA lt2) -- Si el lt2 té un redex a dins, anem a buscar-lo.
     | otherwise = A (redueixUnA lt1) lt2 -- Si no, anem a buscar el redex de lt1.
 
--- FUNCIO L_NORMALITZA_N i L_NORMALITZA_A
+-- FUNCIONS L_NORMALITZA_N i L_NORMALITZA_A
 lNormalitza :: (LT -> LT) -> LT -> [LT] -- Segons si volem fer lNormalitzaN o lNormalitzaA, podem passar redueixUnN o redueixUnA com a primer paràmetre a aquesta funció.
 lNormalitza f lt 
     | estaNormal lt = [] -- Si ja està en forma normal, no hem de fer cap reducció més, per tant, retornem una llista buida perquè no s'han d'afegir més passos
     | otherwise = f lt : lNormalitza f (f lt) -- Si encara no estem en forma normal, fem un pas de la reducció, l'afegim a la llista, i seguim fent reduccions amb el lambda terme resultant d'haver aplicat la reducció.
 
--- FUNCIO NORMALITZA_N i NORMALITZA_A
+lNormalitzaN :: LT -> [LT]
+lNormalitzaN = lNormalitza redueixUnN -- Li passem redueixUnN a lNormalitza perquè les reduccions les faci en ordre normal.
 
+lNormalitzaA :: LT -> [LT]
+lNormalitzaA = lNormalitza redueixUnA -- Li passem redueixUnA a lNormalitza perquè les reduccions les faci en ordre aplicatiu.
+
+-- FUNCIONS NORMALITZA_N i NORMALITZA_A
+normalitza :: (LT -> [LT]) -> LT -> (LT, Int) -- Segons si volem fer normalitzaN o normalitzaA, li hem de passar (lNormalitza redueixUnN) o (lNormalitza redueixUnA) com a primer paràmetre a aquesta funció. És a dir, fem una parcialització de lNormalitza).
+normalitza f lt = (last (f lt), length (f lt)) -- Creem una tupla on el primer element és l'últim lambda terme, és a dir, la forma normal is el lambda terme inicial en tenia; i el segon element és la quantitat de passos que s'ha fet per arribar-hi.
+
+normalitzaN :: LT -> (LT, Int)
+normalitzaN = normalitza lNormalitzaN -- Li passem lNormalitzaN perquè faci la seqüència de reduccions en ordre normal.
+
+normalitzaA :: LT -> (LT, Int)
+normalitzaA = normalitza lNormalitzaA -- Li passem lNormalitzaA perquè faci la seqüència de reduccions en ordre aplicatiu.
 
 -- TESTS
 -- Definicions de lambda termes
@@ -149,8 +162,14 @@ test_redueixUnN = redueixUnN d == e
 test_redueixUnA :: Bool
 test_redueixUnA = redueixUnA f == g
 
--- Tests funció lNormalitza
+-- Tests funcions lNormalitzaN i lNormalitzaA
 test_lNormalitzaN :: [LT]
-test_lNormalitzaN = lNormalitza redueixUnN h
+test_lNormalitzaN = lNormalitzaN h
 test_lNormalitzaA :: [LT]
-test_lNormalitzaA = lNormalitza redueixUnA h 
+test_lNormalitzaA = lNormalitzaA h
+
+-- Tests funció normalitza
+test_normalitzaN :: (LT, Int)
+test_normalitzaN = normalitzaN h
+test_normalitzaA :: (LT, Int)
+test_normalitzaA = normalitzaA h
