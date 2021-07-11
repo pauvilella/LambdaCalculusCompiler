@@ -110,8 +110,8 @@ normalitzaN = normalitza lNormalitzaN -- Li passem lNormalitzaN perquè faci la 
 normalitzaA :: LT -> (LT, Int)
 normalitzaA = normalitza lNormalitzaA -- Li passem lNormalitzaA perquè faci la seqüència de reduccions en ordre aplicatiu.
 
--- TESTS
--- Definicions de lambda termes
+
+-- DEFINICIONS DE LAMBDA TERMES
 a :: LT
 a = L "x" (V "y")
 
@@ -136,6 +136,76 @@ g = A (L "y" (V "y")) (V "x")
 h :: LT
 h = L "x" (L "z" (L "x" (A (A (A (L "x" (L "y" (A (V "x") (V "y")))) (V "x")) (V "x")) (V "z"))))
 
+defId :: LT -- \x. x
+defId = L "x" (V "x")
+
+defTrue :: LT -- \x. \y. x
+defTrue = L "x" (L "y" (V "x"))
+
+defFalse :: LT -- \x. \y. y
+defFalse = L "x" (L "y" (V "y"))
+
+defNot :: LT -- \t. t false true
+defNot = L "t" (A (A (V "t") defFalse) defTrue)
+
+defAnd :: LT -- \x. \y.(x -> y | false)
+defAnd = L "x" (L "y" (A (A (V "x") (V "y")) defFalse))
+
+defTupla :: LT -- \x. \y. \p. p x y
+defTupla = L "x" (L "y" (L "p" (A (A (V "p") (V "x")) (V "y"))))
+
+defFst :: LT -- \x. x true
+defFst = L "x" (A (V "x") defTrue)
+
+defSnd :: LT -- \x. x false
+defSnd = L "x" (A (V "x") defFalse)
+
+defSuc :: LT -- \n. \f. \x. n f (f x)
+defSuc = L "n" (L "f" (L "x" (A (A (V "n") (V "f")) (A (V "f") (V "x")))))
+
+defSuma :: LT -- \m. \n. \f. \x. m f (n f x)
+defSuma = L "m" (L "n" (L "f" (L "x" (A (A (V "m") (V "f")) (A (A (V "n") (V "f")) (V "x"))))))
+
+defProd :: LT -- \m. \n. \f. \x. m (n f) x
+defProd = L "m" (L "n" (L "f" (L "x" (A (A (V "m") (A (V "n") (V "f"))) (V "x")))))
+
+defEsZero :: LT -- \n. n (\x. false) true
+defEsZero = L "n" (A (A (V "n") (L "x" defFalse)) defTrue)
+
+def0 :: LT -- \f. \x. x
+def0 = L "f" (L "x" (V "x"))
+
+def1 :: LT -- \f. \x. f x
+def1 = L "f" (L "x" (A (V "f") (V "x")))
+
+def2 :: LT -- \f. \x. f (f x)
+def2 = L "f" (L "x" (A (V "f") (A (V "f") (V "x"))))
+
+def3 :: LT -- \f. \x. f (f (f x))
+def3 = L "f" (L "x" (A (V "f") (A (V "f") (A (V "f") (V "x")))))
+
+def4 :: LT -- \f. \x. f (f (f (f x)))
+def4 = fst (normalitzaN (A (A defProd def2) def2))
+
+defG :: LT -- \x. ((\y. (\x. y y)) (\y. (\x. y y)))
+defG = L "x" (A (L "y" (L "x" (A (V "y") (V "y")))) (L "y" (L "x" (A (V "y") (V "y")))))
+
+defPrefn :: LT -- \f. \p. < false , (fst p -> snd p | f(snd p)) >
+defPrefn = L "f" (L "p" (L "x" (A (A (V "x") defFalse) (A (A (A defFst (V "p")) (A defSnd (V "p"))) (A (V "f") (A defSnd (V "p")))))))
+
+defPrec :: LT -- \n. \f. \x. snd (n (prefn f) <true, x>)
+defPrec = L "n" (L "f" (L "x" (A defSnd (A (A (V "n") (A defPrefn (V "f"))) (L "p" (A (A (V "p") defTrue) (V "x")))))))
+
+defY :: LT -- \f. (\x. f (x x)) (\x. f (x x))
+defY = L "f" (A (L "x" (A (V "f")(A (V "x") (V "x")))) (L "x" (A (V "f")(A (V "x") (V "x")))))
+
+defT :: LT -- (\x.(\y. y(x x y))) (\x.(\y. y(x x y)))
+defT = A (L "x" (L "y" (A (V "y") (A (A (V "x") (V "x")) (V "y"))))) (L "x" (L "y" (A (V "y") (A (A (V "x") (V "x")) (V "y")))))
+
+defFact :: LT -- T (\f. \n. (eszero n -> 1 | * n (f (prec n))))
+defFact = A defT (L "f" (L "n" (A (A (A defEsZero (V "n")) def1) (A (A defProd (V "n")) (A (V "f") (A defPrec (V "n")))))))
+
+-- TESTS
 -- Tests funció subst
 test_subst_sense_captura :: LT
 test_subst_sense_captura = subst a "y" b
@@ -173,3 +243,41 @@ test_normalitzaN :: (LT, Int)
 test_normalitzaN = normalitzaN h
 test_normalitzaA :: (LT, Int)
 test_normalitzaA = normalitzaA h
+
+-- Tests defNot
+test_defNot1 :: Bool
+test_defNot1 = fst (normalitzaN (A defNot defFalse)) == defTrue
+test_defNot2 :: Bool
+test_defNot2 = fst (normalitzaN (A defNot defTrue)) == defFalse
+
+-- Tests defAnd
+test_defAnd1 :: Bool 
+test_defAnd1 = fst (normalitzaN (A (A defAnd defTrue) defFalse)) == defFalse
+test_defAnd2 :: Bool 
+test_defAnd2 = fst (normalitzaN (A (A defAnd defTrue) defTrue)) == defTrue
+
+-- Tests defSuc
+test_defSuc1 :: Bool 
+test_defSuc1 = fst (normalitzaN (A defSuc def0)) == def1
+test_defSuc2 :: Bool 
+test_defSuc2 = fst (normalitzaN (A defSuc def1)) == def2
+
+-- Tests defPrec
+test_defPrec1 :: Bool 
+test_defPrec1 = fst (normalitzaN (A defPrec def1)) == def0
+test_defPrec2 :: Bool 
+test_defPrec2 = fst (normalitzaN (A defPrec def2)) == def1
+
+-- Tests defProc
+test_defProc :: LT
+test_defProc = fst (normalitzaN (A (A defProd def2) def3)) -- Ha de donar: (/f. (/x. ("f" ("f" ("f" ("f" ("f" ("f" "x"))))))))
+
+-- Tests defSuma
+test_defSuma :: Bool 
+test_defSuma = fst (normalitzaN (A (A defSuma def2) def2)) == def4 
+
+-- Tests defFact
+test_defFact1 :: Bool
+test_defFact1 = fst (normalitzaN (A defFact def2)) == def2
+test_defFact2 :: LT
+test_defFact2 = fst (normalitzaN (A defFact def3)) -- Ha de donar 6. Aquest ja triga molt.
