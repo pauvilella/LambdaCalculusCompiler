@@ -281,3 +281,60 @@ test_defFact1 :: Bool
 test_defFact1 = fst (normalitzaN (A defFact def2)) == def2
 test_defFact2 :: LT
 test_defFact2 = fst (normalitzaN (A defFact def3)) -- Ha de donar 6. Aquest ja triga molt.
+
+-- DE BRUIJN
+
+data LTdB = Va Int | La LTdB | Ap LTdB LTdB
+
+instance Show LTdB where
+    show (Va x) = show x
+    show (La y) = "(/. " ++ show y ++ ")"
+    show (Ap x y) = "("++ show x ++ " " ++ show y ++ ")"
+
+type Context = [(Var,Int)]
+
+getVarContext :: (Var, Int) -> Context -> Int
+getVarContext (x, mesGran) [] = mesGran
+getVarContext (x, mesGran) (y:ys)
+    | fst y == x = snd y 
+    | snd y > mesGran = getVarContext (x, snd y) ys
+    | otherwise = getVarContext (x, mesGran)  ys
+
+getVarIndex :: Var -> Context -> Int
+getVarIndex x = getVarContext (x, 0)
+
+incSndElemOfTuple :: (Var, Int) -> (Var, Int)
+incSndElemOfTuple (x, num) = (x, num + 1)
+
+addVarInContext :: Var -> Context -> Context
+addVarInContext x c
+    | (x, index) `elem` c = c
+    | otherwise = c ++ [(x, index + 1)] -- És una variable nova
+    where index = getVarIndex x c
+
+aDeBruijnAux :: Context -> LT -> LTdB
+aDeBruijnAux c (V x)
+    | (x, index) `elem` c = Va index
+    | otherwise = aDeBruijnAux (addVarInContext x c) (V x) -- És una variable nova
+    where index = getVarIndex x c
+aDeBruijnAux c (L x lt) = La (aDeBruijnAux nouContext lt)
+    where 
+        nouContext = map incSndElemOfTuple c ++ [(x, 0)]
+        index = getVarIndex x nouContext
+aDeBruijnAux c (A (V x) lt) = Ap (aDeBruijnAux nouContext (V x)) (aDeBruijnAux nouContext lt)
+    where nouContext = addVarInContext x c
+aDeBruijnAux c (A lt (V x) ) = Ap (aDeBruijnAux nouContext lt) (aDeBruijnAux nouContext (V x))
+    where nouContext = addVarInContext x c
+aDeBruijnAux c (A lt1 lt2) = Ap (aDeBruijnAux c lt1) (aDeBruijnAux c lt2)
+
+aDeBruijn :: LT -> LTdB
+aDeBruijn = aDeBruijnAux []
+
+
+testBruijn_1 :: LTdB
+testBruijn_1 = aDeBruijn (L "o" (A (V "o") (L "z" (A (A (V "x") (V "y")) (V "z")))))
+testBruijn_2 :: LTdB
+testBruijn_2 = aDeBruijn (L "x" (L "y" (A (A (A (V "z") (V "m")) (V "y")) (V "x"))))
+testBruijn_3 :: LTdB
+testBruijn_3 = aDeBruijn (A (L "x" (V "x")) (L "x" (V "x")))
+
