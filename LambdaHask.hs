@@ -1,5 +1,8 @@
 -- PRACTICA LambdaHask
 
+-- Imports
+import Data.Char ( ord, chr )
+
 -- Definir el tipus LT per poder definir lambda termes.
 type Var = String
 
@@ -289,15 +292,20 @@ test_defFact2 = fst (normalitzaN (A defFact def3)) -- Ha de donar 6. Aquest ja t
 
 -- DE BRUIJN
 
+-- Definir el tipus LTdB
 data LTdB = Va Int | La LTdB | Ap LTdB LTdB
 
+-- Derivar LT de Show
 instance Show LTdB where
   show (Va x) = show x
   show (La y) = "(/. " ++ show y ++ ")"
   show (Ap x y) = "(" ++ show x ++ " " ++ show y ++ ")"
 
+-- Definir el que és un context, que és una llista de tuples de (variable, index de la lambda a la que està lligada).
 type Context = [(Var, Int)]
 
+-- FUNCIONS AUXILIARS aDeBruijn
+-- Retorna l'index que té associat en el context la varible que reb per paràmetre. Si la variable no està el context, retorna l'índex més gran del context.
 getVarContext :: (Var, Int) -> Context -> Int
 getVarContext (x, mesGran) [] = mesGran
 getVarContext (x, mesGran) (y : ys)
@@ -305,45 +313,84 @@ getVarContext (x, mesGran) (y : ys)
   | snd y > mesGran = getVarContext (x, snd y) ys
   | otherwise = getVarContext (x, mesGran) ys
 
+-- Funció per cridar getVarContext més còmodament (no havent de passar 0).
 getVarIndex :: Var -> Context -> Int
 getVarIndex x = getVarContext (x, 0)
 
+-- Funció que reb una tupla i incrementa en 1 el segon element d'aquesta. La faig servir per passar-la a la funció map, per incrementar l'índex de totes les variables que hi ha en el context.
 incSndElemOfTuple :: (Var, Int) -> (Var, Int)
 incSndElemOfTuple (x, num) = (x, num + 1)
 
+-- Serveix per afegir una variable en el context.
 addVarInContext :: Var -> Context -> Context
 addVarInContext x c
-  | (x, index) `elem` c = c
-  | otherwise = c ++ [(x, index + 1)] -- És una variable nova
+  | (x, index) `elem` c = c -- Si ja hi era, no modifiquem el context, simplement retornem el mateix.
+  | otherwise = c ++ [(x, index + 1)] -- Si no, vol dir que és una variable nova, per tant, la concateno al final del context, ficant-li (index + 1) com a índex, ja que retornem que si no hi és, getVarIndex el que retorna és l'índex més gran del context.
   where
-    index = getVarIndex x c
+    index = getVarIndex x c -- Recuperem l'índex de la varialbe que volem afegir
 
+-- Funció per transformar LT a LTdB
 aDeBruijnAux :: Context -> LT -> LTdB
-aDeBruijnAux c (V x)
-  | (x, index) `elem` c = Va index
-  | otherwise = aDeBruijnAux (addVarInContext x c) (V x) -- És una variable nova
+aDeBruijnAux c (V x) -- És una variable
+  | (x, index) `elem` c = Va index -- Si ja està en el context, retornem el seu índex
+  | otherwise = aDeBruijnAux (addVarInContext x c) (V x) -- Si no hi és, vol dir que és una variable nova, per tant, l'afegim al context i tornem a cridar a aDeBruijn amb aquest nou context
   where
     index = getVarIndex x c
-aDeBruijnAux c (L x lt) = La (aDeBruijnAux nouContext lt)
+aDeBruijnAux c (L x lt) = La (aDeBruijnAux nouContext lt) -- És una labmda abstracció, simplement printem la "/." i transformem el LT de dins passant-li el nou context modificat.
   where
-    nouContext = map incSndElemOfTuple c ++ [(x, 0)]
-    index = getVarIndex x nouContext
-aDeBruijnAux c (A (V x) lt) = Ap (aDeBruijnAux c (V x)) (aDeBruijnAux nouContext lt) -- Afegir el nou context a l'altra part de la recursivitat, perque sino tenim el context "c", que no te ficada la variable que estem fent
+    nouContext = map incSndElemOfTuple c ++ [(x, 0)] -- Si afegim una lambda abstracció, vol dir que totes les variables que hi hagin a la dreta d'aquesta, és a dir, el que quedi per transformar, hauran d'estar tots incrementats en 1, ja que hi haurà aquesta /. de més. A part d'això, també afegim la nova variable al context amb un índex de 0, ja que com que és la /. que acabem d'afegir, segur que estarà a 0 de distància.
+aDeBruijnAux c (A (V x) lt) = Ap (aDeBruijnAux c (V x)) (aDeBruijnAux nouContext lt) -- Si una de les part de l'aplicació és una variable, anem a transforma aquesta normal. No obstant, quan fem la crida per transformar l'altra part de l'aplicació, hem d'incloure la variable de l'altra part al context i fer la crida amb aquest nou context , sinó, no la tindrem en compte i agafarem el context antic, on no estava posada.
+  where
+    nouContext = addVarInContext x c -- Nou context amb la variable x afegida, el passem a l'altra part de l'aplicació.
+aDeBruijnAux c (A lt (V x)) = Ap (aDeBruijnAux nouContext lt) (aDeBruijnAux c (V x)) -- Cas igual que l'anterior però amb la variable a la part dreta de l'aplicació.
   where
     nouContext = addVarInContext x c
-aDeBruijnAux c (A lt (V x)) = Ap (aDeBruijnAux nouContext lt) (aDeBruijnAux c (V x)) -- Afegir el nou context a l'altra part de la recursivitat, perque sino tenim el context "c", que no te ficada la variable que estem fent
-  where
-    nouContext = addVarInContext x c
-aDeBruijnAux c (A lt1 lt2) = Ap (aDeBruijnAux c lt1) (aDeBruijnAux c lt2)
+aDeBruijnAux c (A lt1 lt2) = Ap (aDeBruijnAux c lt1) (aDeBruijnAux c lt2) -- Cas general de l'aplicació, simplement transformem els 2 costats de l'aplicació.
 
+-- Funció per cridar aDeBruijnAux més còmodament, és la que utilitzo als tests. Simplement afegeix el context que necessita com a paràmetre la funció aDeBruijnAux.
 aDeBruijn :: LT -> LTdB
 aDeBruijn = aDeBruijnAux []
 
-testBruijn_1 :: LTdB
-testBruijn_1 = aDeBruijn (L "o" (A (V "o") (L "z" (A (A (V "x") (V "y")) (V "z")))))
 
-testBruijn_2 :: LTdB
-testBruijn_2 = aDeBruijn (L "x" (L "y" (A (A (A (V "z") (V "m")) (V "y")) (V "x"))))
+-- FUNCIONS AUXILIARS deDeBruijn
+getIndexContext :: (Var, Int) -> Context -> Var
+getIndexContext (varMesGran, index) [] = varMesGran
+getIndexContext (varMesGran, index) (y : ys)
+  | snd y == index = fst y
+  | fst y > varMesGran = getIndexContext (fst y, index) ys
+  | otherwise = getIndexContext (varMesGran, index) ys
 
-testBruijn_3 :: LTdB
-testBruijn_3 = aDeBruijn (A (L "x" (V "x")) (L "x" (V "x")))
+getIndexVar :: Int -> Context -> Var
+getIndexVar index = getIndexContext ("a", index)
+
+nextVar :: Char -> [Char]
+nextVar c = [chr (ord c + 1)]
+
+addIndexInContext :: Int -> Context -> Context
+addIndexInContext index c
+  | (var, index) `elem` c = c
+  | otherwise = c ++ [(nextVar (head var), index)]
+  where var = getIndexVar index c
+
+deDeBruijnAux :: Context -> LTdB -> LT
+deDeBruijnAux c (Va index)
+  | (var, index) `elem` c = V var
+  | otherwise = deDeBruijnAux (addIndexInContext index c) (Va index)
+  where var = getIndexVar index c
+deDeBruijnAux c (La lt) = L var (deDeBruijnAux nouContext lt)
+  where 
+    c2 = map incSndElemOfTuple c
+    nouContext = addIndexInContext 0 c2
+    var = getIndexVar 0 nouContext  
+  
+
+-- TESTS
+-- Tests aDeBruijn
+test_aDeBruijn1 :: LTdB
+test_aDeBruijn1 = aDeBruijn (L "a" (A (V "a") (L "x" (A (A (V "y") (V "z")) (V "x")))))
+
+test_aDeBruijn2 :: LTdB
+test_aDeBruijn2 = aDeBruijn (L "x" (L "y" (A (A (A (V "z") (V "m")) (V "y")) (V "x"))))
+
+test_aDeBruijn3 :: LTdB
+test_aDeBruijn3 = aDeBruijn (A (L "x" (V "x")) (L "x" (V "x")))
