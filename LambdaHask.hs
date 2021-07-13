@@ -382,7 +382,7 @@ deDeBruijnAux c (La lt) = L var (deDeBruijnAux nouContext lt)
     c2 = map incSndElemOfTuple c
     nouContext = addIndexInContext 0 c2
     var = getIndexVar 0 nouContext  
-  
+--Falta fer les aplicacions
 
 -- TESTS
 -- Tests aDeBruijn
