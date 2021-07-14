@@ -353,6 +353,7 @@ aDeBruijn = aDeBruijnAux []
 
 
 -- FUNCIONS AUXILIARS deDeBruijn
+-- Funció equivalent a getVarContext, però enlloc de buscar per varible, busquem per índex, però és el mateix.
 getIndexContext :: (Var, Int) -> Context -> Var
 getIndexContext (varMesGran, index) [] = varMesGran
 getIndexContext (varMesGran, index) (y : ys)
@@ -360,37 +361,59 @@ getIndexContext (varMesGran, index) (y : ys)
   | fst y > varMesGran = getIndexContext (fst y, index) ys
   | otherwise = getIndexContext (varMesGran, index) ys
 
+-- Funció equivalent a getVarIndex, serveix per cridar més còmodament a getIndexContext.
 getIndexVar :: Int -> Context -> Var
-getIndexVar index = getIndexContext ("a", index)
+getIndexVar index = getIndexContext ("`", index)
 
+-- Funció que donada una variable, retorna la següent variable segons el codi ASCII.
 nextVar :: Char -> [Char]
 nextVar c = [chr (ord c + 1)]
 
+-- Funció equivalent a addVarInContext. Fa el mateix però aquí tenim l'índex inicialment i no la variable. Si l'índex ja hi és, retorna la variable corresponent. Si no hi és, l'afageix amb el següent valor de la varialbe més gran.
 addIndexInContext :: Int -> Context -> Context
 addIndexInContext index c
   | (var, index) `elem` c = c
   | otherwise = c ++ [(nextVar (head var), index)]
   where var = getIndexVar index c
 
+-- Funció per transformar de LTdB a LT
 deDeBruijnAux :: Context -> LTdB -> LT
-deDeBruijnAux c (Va index)
-  | (var, index) `elem` c = V var
-  | otherwise = deDeBruijnAux (addIndexInContext index c) (Va index)
-  where var = getIndexVar index c
-deDeBruijnAux c (La lt) = L var (deDeBruijnAux nouContext lt)
+deDeBruijnAux c (Va index) -- És una variable
+  | (var, index) `elem` c = V var -- Si ja està al context, retornem la variable.
+  | otherwise = deDeBruijnAux (addIndexInContext index c) (Va index) -- Si no hi és, l'afegim al context i tornem a cridar la funció deDeBruijn per transformar-la.
+  where var = getIndexVar index c -- Recuperem la variable associada a l'índex.
+deDeBruijnAux c (La lt) = L var (deDeBruijnAux nouContext lt) -- És una lambda abstracció. Transformem la nova variable de l'abstracció, i cridem deDeBruijnAux per acabar de transformar el lambda terme de dins amb el nou context.
   where 
-    c2 = map incSndElemOfTuple c
-    nouContext = addIndexInContext 0 c2
-    var = getIndexVar 0 nouContext  
---Falta fer les aplicacions
+    c2 = map incSndElemOfTuple c -- Creem un nou context on estan totes les varialbes incrementades en 1 (seguint el codi ascii).
+    nouContext = addIndexInContext 0 c2 -- Afegim un nou índex al nou context, el nou índex és 0, perquè és l'índex de la nova lambda abstracció que acabem de ficar, per tant, segur que estarà a distància 0.
+    var = getIndexVar 0 nouContext -- Recuperem la nova variable associada a l'índex que acabem d'afegir al context.
+deDeBruijnAux c (Ap (Va index) lt) = A (deDeBruijnAux c (Va index)) (deDeBruijnAux nouContext lt) -- Si una de les part de l'aplicació és un índex, anem a transforma aquest normal. No obstant, quan fem la crida per transformar l'altra part de l'aplicació, hem d'incloure l'índex de l'altra part al context i fer la crida amb aquest nou context , sinó, no el tindrem en compte i agafarem el context antic, on no estava posat.
+  where nouContext = addIndexInContext index c -- Nou context amb l'índex afegit. El passem a l'altra costat de l'aplicació
+deDeBruijnAux c (Ap lt (Va index)) = A (deDeBruijnAux nouContext lt) (deDeBruijnAux c (Va index)) -- Cas igual que l'anterior però amb l'índex a la part dreta de l'aplicació.
+  where nouContext = addIndexInContext index c
+deDeBruijnAux c (Ap lt1 lt2) = A (deDeBruijnAux c lt1) (deDeBruijnAux c lt2) -- Cas general de l'aplicació, simplement transformem els 2 costats de l'aplicació.
+
+-- Funció per cridar deDeBruijnAux més còmodament, és la que utilitzo als tests. Simplement afegeix el context que necessita com a paràmetre la funció deDeBruijnAux.
+deDeBruijn :: LTdB -> LT
+deDeBruijn = deDeBruijnAux []
 
 -- TESTS
 -- Tests aDeBruijn
 test_aDeBruijn1 :: LTdB
-test_aDeBruijn1 = aDeBruijn (L "a" (A (V "a") (L "x" (A (A (V "y") (V "z")) (V "x")))))
+test_aDeBruijn1 = aDeBruijn (L "a" (A (V "a") (L "b" (A (A (V "c") (V "d")) (V "b"))))) -- /a. a /b. c d b
 
 test_aDeBruijn2 :: LTdB
-test_aDeBruijn2 = aDeBruijn (L "x" (L "y" (A (A (A (V "z") (V "m")) (V "y")) (V "x"))))
+test_aDeBruijn2 = aDeBruijn (L "a" (L "b" (A (A (A (V "c") (V "d")) (V "b")) (V "a")))) -- /a. /b. c d b a
 
 test_aDeBruijn3 :: LTdB
-test_aDeBruijn3 = aDeBruijn (A (L "x" (V "x")) (L "x" (V "x")))
+test_aDeBruijn3 = aDeBruijn (A (L "x" (V "x")) (L "x" (V "x"))) -- (/a. a) (/a. a)
+
+--Tests deDebruijn
+test_deDeBruijn1 :: LT
+test_deDeBruijn1 = deDeBruijn test_aDeBruijn1
+
+test_deDeBruijn2 :: LT
+test_deDeBruijn2 = deDeBruijn test_aDeBruijn2
+
+test_deDeBruijn3 :: LT
+test_deDeBruijn3 = deDeBruijn test_aDeBruijn3
