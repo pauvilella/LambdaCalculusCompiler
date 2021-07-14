@@ -14,12 +14,9 @@ instance Show LT where
   show (L x lt) = "(/" ++ x ++ ". " ++ show lt ++ ")"
   show (A lt1 lt2) = "(" ++ show lt1 ++ " " ++ show lt2 ++ ")"
 
--- Derivar LT de Eq (Provisional)
+-- Derivar LT de Eq
 instance Eq LT where
-  V x == V y = x == y
-  L x lt1 == L y lt2 = x == y && lt1 == lt2
-  A lt1 lt2 == A lt3 lt4 = lt1 == lt3 && lt2 == lt4
-  _ == _ = False
+  lt1 == lt2 = aDeBruijn lt1 == aDeBruijn lt2
 
 -- FUNCIONS AUXILIARS
 -- Funcions per trobar les variables lliures d'un lambda terme
@@ -300,6 +297,12 @@ instance Show LTdB where
   show (Va x) = show x
   show (La y) = "(/. " ++ show y ++ ")"
   show (Ap x y) = "(" ++ show x ++ " " ++ show y ++ ")"
+
+instance Eq LTdB where
+  Va x == Va y = x == y
+  La lt1 == La lt2 = lt1 == lt2
+  Ap lt1 lt2 == Ap lt3 lt4 = lt1 == lt3 && lt2 == lt4
+  _ == _ = False
 
 -- Definir el que és un context, que és una llista de tuples de (variable, index de la lambda a la que està lligada).
 type Context = [(Var, Int)]
