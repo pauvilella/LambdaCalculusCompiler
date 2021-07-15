@@ -18,6 +18,11 @@ instance Show LT where
 instance Eq LT where
   lt1 == lt2 = aDeBruijn lt1 == aDeBruijn lt2
 
+-- Derivar LT de Ord
+-- Havia pensat dues maneres de fer-ho, segons l'allargada (length de la llista) del context, o segons quin des dos té el índex de variable més gran. He impelementat el segon perquè he arribat a la conclusió que és com una mesura similar, ja que com més variables hi hagi (index més alt), més llarg serà el context; i la segona opció era més fàcil d'implementar.
+instance Ord LT where
+  lt1 <= lt2 = getHighestIndex (aDeBruijn lt1) <= getHighestIndex (aDeBruijn lt2)
+
 -- FUNCIONS AUXILIARS
 -- Funcions per trobar les variables lliures d'un lambda terme
 rmVarAbs :: Var -> [Var] -> [Var]
@@ -400,6 +405,20 @@ deDeBruijnAux c (Ap lt1 lt2) = A (deDeBruijnAux c lt1) (deDeBruijnAux c lt2) -- 
 deDeBruijn :: LTdB -> LT
 deDeBruijn = deDeBruijnAux []
 
+-- Funció per trobar quin és l'índex més gran d'un LTdB
+getHighestIndexAux :: Int -> LTdB -> Int
+getHighestIndexAux greater (Va x) = if x > greater then x else greater
+getHighestIndexAux greater (La lt) = getHighestIndexAux greater lt
+getHighestIndexAux greater (Ap lt1 lt2) = if greaterLT1 > greaterLT2 then greaterLT1 else greaterLT2
+  where
+    greaterLT1 = getHighestIndexAux greater lt1
+    greaterLT2 = getHighestIndexAux greater lt2
+
+-- Funció per cridar més còmodament a getHighestIndexAux. És la que faré servir per fer la alfa-equivalencia.
+getHighestIndex :: LTdB -> Int
+getHighestIndex = getHighestIndexAux 0
+
+
 -- TESTS
 -- Tests aDeBruijn
 test_aDeBruijn1 :: LTdB
@@ -411,7 +430,7 @@ test_aDeBruijn2 = aDeBruijn (L "a" (L "b" (A (A (A (V "c") (V "d")) (V "b")) (V 
 test_aDeBruijn3 :: LTdB
 test_aDeBruijn3 = aDeBruijn (A (L "x" (V "x")) (L "x" (V "x"))) -- (/a. a) (/a. a)
 
---Tests deDebruijn
+-- Tests deDebruijn
 test_deDeBruijn1 :: LT
 test_deDeBruijn1 = deDeBruijn test_aDeBruijn1
 
@@ -420,3 +439,21 @@ test_deDeBruijn2 = deDeBruijn test_aDeBruijn2
 
 test_deDeBruijn3 :: LT
 test_deDeBruijn3 = deDeBruijn test_aDeBruijn3
+
+-- Tests getHigherIndex
+test_getHighestIndex1 :: Int
+test_getHighestIndex1 = getHighestIndex test_aDeBruijn1
+
+test_getHighestIndex2 :: Int
+test_getHighestIndex2 = getHighestIndex test_aDeBruijn2
+
+test_getHighestIndex3 :: Int
+test_getHighestIndex3 = getHighestIndex test_aDeBruijn3
+
+-- Tests Ord de LT
+test_Ord1 :: Bool 
+test_Ord1 = defT <= defFact -- True
+test_Ord2 :: Bool
+test_Ord2 = defFact <= defT -- False 
+test_Ord3 :: Bool 
+test_Ord3 = defTupla <= defSuma -- True
