@@ -384,7 +384,7 @@ nextVar [x]
   | ord x `elem` [96 .. 121] = [chr (ord x + 1)] -- està entre la "a" i la "y"
   | ord x == 122 = x : ['1'] --Hem arribat a la z, retornem z1
   | ord x == 57 = x : ['1'] --La variable acaba en 9, hi afegim un 1 al final i tornem a començar...
-  | ord x `elem` [31 .. 38] = [chr (ord x + 1)] -- Si estem entre el 0 i l'1, retornem el següent núemro
+  | ord x `elem` [49 .. 56] = [chr (ord x + 1)] -- Si estem entre el 0 i l'1, retornem el següent núemro
   | otherwise = [x]
 nextVar (x : xs) = x : nextVar xs
 
