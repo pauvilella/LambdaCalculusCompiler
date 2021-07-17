@@ -1,7 +1,7 @@
 -- PRACTICA LambdaHask
 
 -- Imports
-import Data.Char ( ord, chr )
+import Data.Char (chr, ord)
 
 -- Definir el tipus LT per poder definir lambda termes.
 type Var = String
@@ -11,7 +11,7 @@ data LT = V Var | L Var LT | A LT LT
 -- Derivar LT de Show
 instance Show LT where
   show (V x) = show x
-  show (L x lt) = "(/" ++ x ++ ". " ++ show lt ++ ")"
+  show (L x lt) = "(\\" ++ x ++ ". " ++ show lt ++ ")"
   show (A lt1 lt2) = "(" ++ show lt1 ++ " " ++ show lt2 ++ ")"
 
 -- Derivar LT de Eq
@@ -53,13 +53,19 @@ checkIfIsInFreeVars x (y : ys)
   | x == y = True
   | otherwise = checkIfIsInFreeVars x ys
 
+-- Funció que retorna la següent variable que s'ha de subsituir al lambda terme (assegurant-nos que aquesta variable no hi sigui ja al lambda terme)
+newVariable :: Var -> LT -> Var
+newVariable x lt = if checkIfIsInFreeVars x (freeVars lt) then newVariable (x ++ "*") lt else x
+
 -- FUNCIO SUBST
 subst :: LT -> Var -> LT -> LT
 subst (V x) y lt2 = if x == y then lt2 else V x -- Si és una sola variable, i aquesta és la variable a ser subsituida, la substiuim; si no, deixem la variable que hi havia.
 subst (L x lt1) y lt2
   | x == y = L x lt1 -- Vol dir que la variable que hauria de ser substituida no es lliure, ja que la lliga la labmda abstracció, per tant, no es substiuirà res, es queda el mateix lambda terme.
-  | checkIfIsInFreeVars x (freeVars lt2) = subst (L (x ++ "*") (subst lt1 x (V (x ++ "*")))) y lt2 -- Aqui detectem que hi hauria captura de variables, per tant el que fem eés tornar a fer la substitució però amb un canvi de variable de x a x* a lt1.
+  | checkIfIsInFreeVars x (freeVars lt2) = subst (L novaVariable (subst lt1 x (V novaVariable))) y lt2 -- Aqui detectem que hi hauria captura de variables, per tant el que fem és tornar a fer la substitució però amb un canvi de variable de x a novaVariable a lt1.
   | otherwise = L x (subst lt1 y lt2) -- Deixem la lambda abstracció normal i fem la substitució a la part de dins de l'abstracció
+  where
+    novaVariable = newVariable (x ++ "*") lt1 -- Ens dona la nova variable que haurà de ser subsituida per no fer captura de variables.
 subst (A lt1 lt2) y lt3 = A (subst lt1 y lt3) (subst lt2 y lt3) -- Simplement apliquem la substituicó als dos lambda termes de l'aplicació.
 
 -- FUNCIO ESTA NORMAL
@@ -74,7 +80,9 @@ betaRedueix :: LT -> LT
 betaRedueix (V x) = V x -- Si es una variable, no es un redex, simplement la retornem
 betaRedueix (L x lt) = L x (betaRedueix lt) -- És una abstracció, per tant segur que encara no hem trobat el redex que busquem, llavors, simplement seguim buscant-lo en el lambda terme de dins l'abstracció.
 betaRedueix (A (L x lt1) lt2) = subst lt1 x lt2 -- Això és el redex, per tant, simplement el que hem de fer és beta reduir-lo fent servir la funcio subst, substituint les variables x que apareixin a lt1 per lt2.
-betaRedueix (A lt1 lt2) = A (betaRedueix lt1) (betaRedueix lt2) -- Cas general de l'aplicació, sabem que no és un redex perquè si ho fós, hauria entrat per l'equcació de dalt, per tant només continuem buscant el redex als dos lt de l'aplicació.
+betaRedueix (A lt1 lt2)
+  | not (estaNormal lt1) = A (betaRedueix lt1) lt2 -- Primer hem de mirar si la part de l'esquerra té està forma normal, si no ho està, anem a beta-reduir aquest.
+  | otherwise = A lt1 (betaRedueix lt2) -- Si sí que està en forma normal, anem a beta-reduir el de la dreta.
 
 -- FUNCIO REDUEIX_UN_N
 redueixUnN :: LT -> LT
@@ -85,8 +93,8 @@ redueixUnA :: LT -> LT
 redueixUnA (V x) = V x -- Si es una variable, no es un redex, simplement la retornem
 redueixUnA (L x lt) = L x (redueixUnA lt) -- És una abstracció, segur que no és un redex, per tant, seguim buscant un redex en el lt de dins l'abstracció.
 redueixUnA (A (L x lt1) lt2) -- Cas del redex, ara el que hem de mirar és si és l'últim redex de tots (el de més endins), o si hem de seguir buscant un a més endins. Per fer-ho, utiltizo la funció estaNormal.
-  | not (estaNormal lt2) = A (L x lt1) (redueixUnA lt2) -- Si el lt2 té un redex a dins, anem a buscar aquest.
   | not (estaNormal lt1) = A (L x (redueixUnA lt1)) lt2 -- Si el lt1 té un redex a dins, anem a buscar aquest.
+  | not (estaNormal lt2) = A (L x lt1) (redueixUnA lt2) -- Si el lt2 té un redex a dins, anem a buscar aquest.
   | otherwise = subst lt1 x lt2 -- Si els dos lt estan en forma normal, vol dir que aquest és ja el redex de més endins, per tant, fem servir la funció subst per beta-reduir-lo.
 redueixUnA (A lt1 lt2) -- Cas general aplicació, hem de mirar quin dels dos lt té un redex a dins per anar-lo a buscar. Comencem primer pel de la dreta.
   | not (estaNormal lt2) = A lt1 (redueixUnA lt2) -- Si el lt2 té un redex a dins, anem a buscar-lo.
@@ -290,24 +298,21 @@ test_defFact1 :: Bool
 test_defFact1 = fst (normalitzaN (A defFact def2)) == def2
 
 test_defFact2 :: LT
-test_defFact2 = fst (normalitzaN (A defFact def3)) -- Ha de donar 6. Aquest ja triga molt.
+test_defFact2 = fst (normalitzaN (A defFact def3)) -- Ha de donar 6.
+
+test_defFact3 :: LT
+test_defFact3 = fst (normalitzaN (A defFact def4)) -- Ha de donar 24. (El calcula bé)
 
 -- DE BRUIJN
 
 -- Definir el tipus LTdB
-data LTdB = Va Int | La LTdB | Ap LTdB LTdB
+data LTdB = Va Int | La LTdB | Ap LTdB LTdB deriving (Eq)
 
 -- Derivar LT de Show
 instance Show LTdB where
   show (Va x) = show x
-  show (La y) = "(/. " ++ show y ++ ")"
+  show (La y) = "(\\. " ++ show y ++ ")"
   show (Ap x y) = "(" ++ show x ++ " " ++ show y ++ ")"
-
-instance Eq LTdB where
-  Va x == Va y = x == y
-  La lt1 == La lt2 = lt1 == lt2
-  Ap lt1 lt2 == Ap lt3 lt4 = lt1 == lt3 && lt2 == lt4
-  _ == _ = False
 
 -- Definir el que és un context, que és una llista de tuples de (variable, index de la lambda a la que està lligada).
 type Context = [(Var, Int)]
@@ -359,7 +364,6 @@ aDeBruijnAux c (A lt1 lt2) = Ap (aDeBruijnAux c lt1) (aDeBruijnAux c lt2) -- Cas
 aDeBruijn :: LT -> LTdB
 aDeBruijn = aDeBruijnAux []
 
-
 -- FUNCIONS AUXILIARS deDeBruijn
 -- Funció equivalent a getVarContext, però enlloc de buscar per varible, busquem per índex, però és el mateix.
 getIndexContext :: (Var, Int) -> Context -> Var
@@ -374,31 +378,42 @@ getIndexVar :: Int -> Context -> Var
 getIndexVar index = getIndexContext ("`", index)
 
 -- Funció que donada una variable, retorna la següent variable segons el codi ASCII.
-nextVar :: Char -> [Char]
-nextVar c = [chr (ord c + 1)]
+nextVar :: [Char] -> [Char]
+nextVar [] = []
+nextVar [x]
+  | ord x `elem` [96 .. 121] = [chr (ord x + 1)] -- està entre la "a" i la "y"
+  | ord x == 122 = x : ['1'] --Hem arribat a la z, retornem z1
+  | ord x == 57 = x : ['1'] --La variable acaba en 9, hi afegim un 1 al final i tornem a començar...
+  | ord x `elem` [31 .. 38] = [chr (ord x + 1)] -- Si estem entre el 0 i l'1, retornem el següent núemro
+  | otherwise = [x]
+nextVar (x : xs) = x : nextVar xs
 
 -- Funció equivalent a addVarInContext. Fa el mateix però aquí tenim l'índex inicialment i no la variable. Si l'índex ja hi és, retorna la variable corresponent. Si no hi és, l'afageix amb el següent valor de la varialbe més gran.
 addIndexInContext :: Int -> Context -> Context
 addIndexInContext index c
   | (var, index) `elem` c = c
-  | otherwise = c ++ [(nextVar (head var), index)]
-  where var = getIndexVar index c
+  | otherwise = c ++ [(nextVar var, index)]
+  where
+    var = getIndexVar index c
 
 -- Funció per transformar de LTdB a LT
 deDeBruijnAux :: Context -> LTdB -> LT
 deDeBruijnAux c (Va index) -- És una variable
   | (var, index) `elem` c = V var -- Si ja està al context, retornem la variable.
   | otherwise = deDeBruijnAux (addIndexInContext index c) (Va index) -- Si no hi és, l'afegim al context i tornem a cridar la funció deDeBruijn per transformar-la.
-  where var = getIndexVar index c -- Recuperem la variable associada a l'índex.
+  where
+    var = getIndexVar index c -- Recuperem la variable associada a l'índex.
 deDeBruijnAux c (La lt) = L var (deDeBruijnAux nouContext lt) -- És una lambda abstracció. Transformem la nova variable de l'abstracció, i cridem deDeBruijnAux per acabar de transformar el lambda terme de dins amb el nou context.
-  where 
+  where
     c2 = map incSndElemOfTuple c -- Creem un nou context on estan totes les varialbes incrementades en 1 (seguint el codi ascii).
     nouContext = addIndexInContext 0 c2 -- Afegim un nou índex al nou context, el nou índex és 0, perquè és l'índex de la nova lambda abstracció que acabem de ficar, per tant, segur que estarà a distància 0.
     var = getIndexVar 0 nouContext -- Recuperem la nova variable associada a l'índex que acabem d'afegir al context.
 deDeBruijnAux c (Ap (Va index) lt) = A (deDeBruijnAux c (Va index)) (deDeBruijnAux nouContext lt) -- Si una de les part de l'aplicació és un índex, anem a transforma aquest normal. No obstant, quan fem la crida per transformar l'altra part de l'aplicació, hem d'incloure l'índex de l'altra part al context i fer la crida amb aquest nou context , sinó, no el tindrem en compte i agafarem el context antic, on no estava posat.
-  where nouContext = addIndexInContext index c -- Nou context amb l'índex afegit. El passem a l'altra costat de l'aplicació
+  where
+    nouContext = addIndexInContext index c -- Nou context amb l'índex afegit. El passem a l'altra costat de l'aplicació
 deDeBruijnAux c (Ap lt (Va index)) = A (deDeBruijnAux nouContext lt) (deDeBruijnAux c (Va index)) -- Cas igual que l'anterior però amb l'índex a la part dreta de l'aplicació.
-  where nouContext = addIndexInContext index c
+  where
+    nouContext = addIndexInContext index c
 deDeBruijnAux c (Ap lt1 lt2) = A (deDeBruijnAux c lt1) (deDeBruijnAux c lt2) -- Cas general de l'aplicació, simplement transformem els 2 costats de l'aplicació.
 
 -- Funció per cridar deDeBruijnAux més còmodament, és la que utilitzo als tests. Simplement afegeix el context que necessita com a paràmetre la funció deDeBruijnAux.
@@ -417,7 +432,6 @@ getHighestIndexAux greater (Ap lt1 lt2) = if greaterLT1 > greaterLT2 then greate
 -- Funció per cridar més còmodament a getHighestIndexAux. És la que faré servir per fer la alfa-equivalencia.
 getHighestIndex :: LTdB -> Int
 getHighestIndex = getHighestIndexAux 0
-
 
 -- TESTS
 -- Tests aDeBruijn
@@ -451,9 +465,11 @@ test_getHighestIndex3 :: Int
 test_getHighestIndex3 = getHighestIndex test_aDeBruijn3
 
 -- Tests Ord de LT
-test_Ord1 :: Bool 
+test_Ord1 :: Bool
 test_Ord1 = defT <= defFact -- True
+
 test_Ord2 :: Bool
-test_Ord2 = defFact <= defT -- False 
-test_Ord3 :: Bool 
+test_Ord2 = defFact <= defT -- False
+
+test_Ord3 :: Bool
 test_Ord3 = defTupla <= defSuma -- True
